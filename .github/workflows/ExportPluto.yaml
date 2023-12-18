@@ -46,6 +46,11 @@ jobs:
                   restore-keys: |
                       ${{ runner.os }}-pluto_state_cache-v2-${{ hashFiles('**/Project.toml', '**/Manifest.toml', '.github/workflows/*' ) }}
 
+            - name: Download dataset
+              run: |
+                wget -O dataset.zip https://www.kaggle.com/datasets/amitanshjoshi/spotify-1million-tracks/download?datasetVersionNumber=1
+                unzip dataset.zip -d .
+                rm dataset.zip
 
             - name: Run & export Pluto notebooks
               run: |
