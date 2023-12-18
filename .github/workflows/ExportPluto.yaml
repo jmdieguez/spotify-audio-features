@@ -54,7 +54,7 @@ jobs:
             - name: Download dataset
               run: |
                 mkdir -p ~/.kaggle
-                echo "${{ secrets.KAGGLE_USERNAME }}:${{ secrets.KAGGLE_KEY }}" > ~/.kaggle/kaggle.json
+                echo ${{ secrets.KAGGLE_AUTH }} > ~/.kaggle/kaggle.json
                 chmod 600 ~/.kaggle/kaggle.json
                 kaggle datasets download -d amitanshjoshi/spotify-1million-tracks -v 1
            
