@@ -18,6 +18,10 @@ permissions:
 
 jobs:
     build-and-deploy:
+        env:
+          TDL_SPOTIFY_CLIENT_ID: ${{ secrets.TDL_SPOTIFY_CLIENT_ID }}
+          TDL_SPOTIFY_CLIENT_SECRET: ${{ secrets.TDL_SPOTIFY_CLIENT_SECRET }}
+          TDL_CALLBACK_URI: ${{ secrets.TDL_CALLBACK_URI }}
         runs-on: ubuntu-latest
         steps:
             - name: Checkout this repository
