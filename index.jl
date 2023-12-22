@@ -44,7 +44,7 @@ Markdown.parse("""
 # ╔═╡ a4ef2dc5-4ab7-45fd-8c11-48622071225b
 data = CSV.File("spotify_data.csv") |> DataFrame
 
-# ╔═╡ 29cd8672-dd23-4138-a25a-ed138ba2def7
+# ╔═╡ 6e5908a4-2f60-4675-90ae-f96db75e92ec
 data
 
 # ╔═╡ f700e47b-e3e3-4eda-9d90-29aa3783025a
@@ -340,9 +340,26 @@ begin
     end
 end
 
+# ╔═╡ 6bbd06ee-96e0-4fb7-8855-98190570a17c
+SPOTIFY_API_URL = "https://api.spotify.com/v1/"
+
+# ╔═╡ 803356ce-9ebc-44c2-b046-a99e1088d662
+function encode_ids(ids)
+	return join(map(x -> replace(x, "/" => "%2F", "+" => "%2B", " " => "%20"), ids), ",")
+end
+
+# ╔═╡ 33138cfb-bae4-4dfd-a010-860b42d0dcbe
+function tracks_features_to_df(dict_array)
+	df = DataFrame()
+	for track_features in dict_array
+    	df = vcat(df, DataFrame(track_features))
+	end
+	return df
+end
+
 # ╔═╡ f728f427-c67c-4536-b51a-ebf020609da8
-begin
-	DotEnv.load() # .env
+function get_authorized_token()
+	DotEnv.load()
 	
 	client_id = ENV["TDL_SPOTIFY_CLIENT_ID"]
 	client_secret = ENV["TDL_SPOTIFY_CLIENT_SECRET"]
@@ -353,14 +370,17 @@ begin
 	token_request_headers, token_request_body =
 		get_token_req_body_headers(client_id, client_secret, callback_uri, auth_code)
 
-	token = get_api_token(token_request_headers, token_request_body)
+	return get_api_token(token_request_headers, token_request_body)
+end
 
-	COMMON_REQ_HEADERS = Dict(
-        "Authorization" => "Bearer $token",
-        "Content-Type" => "application/json"
-    )
-
-	SPOTIFY_API_URL = "https://api.spotify.com/v1/"
+# ╔═╡ e82495d6-7070-4b79-9a9d-301f1fbebd4b
+begin
+	if !haskey(ENV, "TDL_RUNNING_ON_GITHUBPAGES")
+		COMMON_REQ_HEADERS = Dict(
+			"Authorization" => "Bearer $(get_authorized_token())",
+			"Content-Type" => "application/json"
+		)
+	end
 end
 
 # ╔═╡ 3d156acc-d820-41d8-ab04-615b07aa53c3
@@ -373,11 +393,6 @@ function api_http_get_request(endpoint)
 	    println("Error al obtener los datos de $endpoint")
 		return nothing
 	end
-end
-
-# ╔═╡ 803356ce-9ebc-44c2-b046-a99e1088d662
-function encode_ids(ids)
-	return join(map(x -> replace(x, "/" => "%2F", "+" => "%2B", " " => "%20"), ids), ",")
 end
 
 # ╔═╡ e03f31f2-6795-46fb-be16-745bb8ce0bee
@@ -403,26 +418,17 @@ begin
 	end
 end
 
-# ╔═╡ e82495d6-7070-4b79-9a9d-301f1fbebd4b
+# ╔═╡ dc7e9753-9f5a-4e3a-abad-8c2a9cea7f6d
 begin
-	favorite_tracks = get_favorite_tracks()
-	favorite_tracks_ids = [item["id"] for item in favorite_tracks["items"]]
-end
-
-# ╔═╡ ac3fcb59-990a-4128-ba5a-760b89fb3742
-tracks_features_dict = get_audio_features_multiple_tracks(favorite_tracks_ids)
-
-# ╔═╡ 33138cfb-bae4-4dfd-a010-860b42d0dcbe
-function tracks_features_to_df(dict_array)
-	df = DataFrame()
-	for track_features in dict_array
-    	df = vcat(df, DataFrame(track_features))
+	if haskey(ENV, "TDL_RUNNING_ON_GITHUBPAGES")
+		df_tracks = CSV.File("df_tracks_sample.csv") |> DataFrame
+	else
+		favorite_tracks = get_favorite_tracks()
+		favorite_tracks_ids = [item["id"] for item in favorite_tracks["items"]]
+		tracks_features_dict = get_audio_features_multiple_tracks(favorite_tracks_ids)
+		df_tracks = tracks_features_to_df(tracks_features_dict["audio_features"])
 	end
-	return df
 end
-
-# ╔═╡ c98cf96e-8555-4ec0-9f23-70dc13470acc
-df_tracks = tracks_features_to_df(tracks_features_dict["audio_features"])
 
 # ╔═╡ 608a4f93-278c-47a7-b45e-97b46c3fc295
 names(df_tracks)
@@ -432,47 +438,6 @@ select!(df_tracks, Not(["analysis_url", "track_href", "type", "id"]))
 
 # ╔═╡ 762b8f67-bd3a-49db-ae42-29f481115dc6
 df_tracks
-
-# ╔═╡ 80212680-af5f-464d-9f28-8e3c526cfce1
-begin
-	function process_batch(batch_ids)
-	    return [track["id"] for track in get_recommendations(batch_ids)]
-	end
-	
-	BATCH_SIZE = 5
-	batches = [favorite_tracks_ids[i:min(i+BATCH_SIZE-1, end)] for i in 1:BATCH_SIZE:length(favorite_tracks_ids)]
-	
-	# recommended_ids = [process_batch(batch) for batch in batches]
-	# recommended_tracks = vcat(recommended_ids...)
-
-	recommended_threads = [@spawn process_batch(batch) for batch in batches]
-	recommended_tracks = vcat(fetch.(recommended_threads)...)
-end
-
-# ╔═╡ c5ec84dd-06ac-433f-8e55-72932891bcbe
-recommended_tracks
-
-# ╔═╡ ec787a8f-9821-49ba-bae3-3f37c958bb71
-unique_recommended_tracks = collect(Set(recommended_tracks))
-
-# ╔═╡ 5e883871-e5b4-41dd-bd0c-3b1299ff62df
-begin
-	len_recommended_tracks = length(recommended_tracks)
-	len_unique_recommended_tracks = length(unique_recommended_tracks)
-
-	n_filtered = len_recommended_tracks - len_unique_recommended_tracks
-	
-	println("Se filtraron $n_filtered de $len_recommended_tracks canciones. $len_unique_recommended_tracks canciones únicas")
-end
-
-# ╔═╡ e0b4360c-e534-4617-9c0e-03f6c2d5b384
-sample_idxs = sample(1:len_unique_recommended_tracks, 25, replace=false)
-
-# ╔═╡ c1a4344c-1b9d-46fb-aa89-2979e8ee294a
-tracks = unique_recommended_tracks[sample_idxs]
-
-# ╔═╡ ab76d1cb-0f88-45e3-9006-5b540a78e8d9
-tracks_uris = ["spotify:track:$t" for t in tracks]
 
 # ╔═╡ 5006ea0a-c26c-4e9c-a422-cdb54e6415d9
 function create_playlist(name, uris)
@@ -493,8 +458,27 @@ function create_playlist(name, uris)
 	end
 end
 
-# ╔═╡ 2dd20f72-cc29-49cb-8ea4-c87b35a06b0c
-create_playlist("TDL - Playlist", tracks_uris)
+# ╔═╡ 80212680-af5f-464d-9f28-8e3c526cfce1
+begin
+	function process_batch(batch_ids)
+	    return [track["id"] for track in get_recommendations(batch_ids)]
+	end
+
+	if !haskey(ENV, "TDL_RUNNING_ON_GITHUBPAGES")
+		BATCH_SIZE = 5
+		batches = [favorite_tracks_ids[i:min(i+BATCH_SIZE-1, end)] for i in 1:BATCH_SIZE:length(favorite_tracks_ids)]
+	
+		recommended_threads = [@spawn process_batch(batch) for batch in batches]
+		recommended_tracks = vcat(fetch.(recommended_threads)...)
+
+		unique_recommended_tracks = collect(Set(recommended_tracks))
+		len_unique_recommended_tracks = length(unique_recommended_tracks)
+		sample_idxs = sample(1:len_unique_recommended_tracks, 25, replace=false)
+		tracks = unique_recommended_tracks[sample_idxs]
+		tracks_uris = ["spotify:track:$t" for t in tracks]
+		create_playlist("TDL - Playlist", tracks_uris)
+	end
+end
 
 # ╔═╡ e2c68d9e-b071-4a23-b619-17159e1f266c
 df_tracks_pca = select(df_tracks, Not(:uri))
@@ -2457,7 +2441,7 @@ version = "1.4.1+1"
 # ╠═5adaa470-86b2-4745-a3c1-88510829685f
 # ╟─457cf7cd-fb6b-43f5-8eff-9c5b7ef7cf30
 # ╠═a4ef2dc5-4ab7-45fd-8c11-48622071225b
-# ╠═29cd8672-dd23-4138-a25a-ed138ba2def7
+# ╠═6e5908a4-2f60-4675-90ae-f96db75e92ec
 # ╠═f700e47b-e3e3-4eda-9d90-29aa3783025a
 # ╠═62a4ff13-43bb-4b59-bcbb-2e74cd6ba354
 # ╠═4b10d8e9-c9da-4686-a2fb-6fac57bcb745
@@ -2490,26 +2474,19 @@ version = "1.4.1+1"
 # ╠═97ba228c-ee5f-4bcf-8ec4-5b5d3390fc8d
 # ╠═ba5ab88e-cd53-48f3-9658-6113cf980432
 # ╠═efff1b02-fc32-47e9-8700-f44c34275016
-# ╠═f728f427-c67c-4536-b51a-ebf020609da8
+# ╠═6bbd06ee-96e0-4fb7-8855-98190570a17c
 # ╠═3d156acc-d820-41d8-ab04-615b07aa53c3
 # ╠═e03f31f2-6795-46fb-be16-745bb8ce0bee
-# ╠═e82495d6-7070-4b79-9a9d-301f1fbebd4b
 # ╠═803356ce-9ebc-44c2-b046-a99e1088d662
-# ╠═ac3fcb59-990a-4128-ba5a-760b89fb3742
 # ╠═33138cfb-bae4-4dfd-a010-860b42d0dcbe
-# ╠═c98cf96e-8555-4ec0-9f23-70dc13470acc
+# ╠═f728f427-c67c-4536-b51a-ebf020609da8
+# ╠═e82495d6-7070-4b79-9a9d-301f1fbebd4b
+# ╠═dc7e9753-9f5a-4e3a-abad-8c2a9cea7f6d
 # ╠═608a4f93-278c-47a7-b45e-97b46c3fc295
 # ╠═37f86c36-6b32-475f-b191-dd17ac334669
 # ╠═762b8f67-bd3a-49db-ae42-29f481115dc6
 # ╠═80212680-af5f-464d-9f28-8e3c526cfce1
-# ╠═c5ec84dd-06ac-433f-8e55-72932891bcbe
-# ╠═ec787a8f-9821-49ba-bae3-3f37c958bb71
-# ╠═5e883871-e5b4-41dd-bd0c-3b1299ff62df
-# ╠═e0b4360c-e534-4617-9c0e-03f6c2d5b384
-# ╠═c1a4344c-1b9d-46fb-aa89-2979e8ee294a
-# ╠═ab76d1cb-0f88-45e3-9006-5b540a78e8d9
 # ╟─5006ea0a-c26c-4e9c-a422-cdb54e6415d9
-# ╠═2dd20f72-cc29-49cb-8ea4-c87b35a06b0c
 # ╠═e2c68d9e-b071-4a23-b619-17159e1f266c
 # ╠═afb51764-6dc7-441b-8118-51276ab9a1fd
 # ╠═8c83b43a-4463-4f51-8089-24044f8787ed
