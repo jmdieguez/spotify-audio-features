@@ -1,10 +1,16 @@
 import Pkg
 
 Pkg.add("Oxygen")
+Pkg.add("HTTP")
+Pkg.add("JSON")
 
 using Oxygen, HTTP, JSON
 
 SPOTIFY_API_URL = "https://api.spotify.com/v1/"
+
+function encode_ids(ids)
+	return join(map(x -> replace(x, "/" => "%2F", "+" => "%2B", " " => "%20"), ids), ",")
+end
 
 function api_http_get_request(endpoint, headers)
 	url = SPOTIFY_API_URL * endpoint
@@ -15,10 +21,6 @@ function api_http_get_request(endpoint, headers)
 	    println("Error al obtener los datos de $endpoint")
 		return nothing
 	end
-end
-
-function encode_ids(ids, headers)
-	return join(map(x -> replace(x, "/" => "%2F", "+" => "%2B", " " => "%20"), ids), ",")
 end
 
 function get_track_info(track_id, headers)
