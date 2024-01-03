@@ -1,20 +1,19 @@
 import Pkg
 
-Pkg.add("Oxygen")
-Pkg.add("HTTP")
-Pkg.add("JSON")
+Pkg.add(["Genie", "HTTP", "JSON"])
 
-using Oxygen, HTTP, JSON
+using Genie, HTTP, JSON
 
 SPOTIFY_API_URL = "https://api.spotify.com/v1/"
 
 function encode_ids(ids)
-	return join(map(x -> replace(x, "/" => "%2F", "+" => "%2B", " " => "%20"), ids), ",")
+	return join(map(x -> replace(x, '/' => "%2F", '+' => "%2B", ' ' => "%20"), ids), ",")
 end
 
 function api_http_get_request(endpoint, headers)
 	url = SPOTIFY_API_URL * endpoint
 	response = HTTP.get(url, headers)
+
 	if response.status == 200
 		return JSON.parse(String(response.body))
 	else
@@ -43,15 +42,20 @@ function get_recommendations(ids, headers)
     return api_http_get_request("recommendations?seed_tracks=$(encode_ids(ids))&limit=100", headers)["tracks"]
 end
 
-@get "/fav" function(req::HTTP.Request)
-    token = queryparams(req)["token"]
+route("/fav") do
+    token = params(:token, nothing)
 
-    headers = Dict(
+	headers = Dict(
 			"Authorization" => "Bearer $token",
 			"Content-Type" => "application/json"
 		    )
 
-    return get_favorite_tracks(headers)
+    get_favorite_tracks(headers) |> json
 end
 
-serve()
+route("/") do
+    h1("Hi!") |> html
+end
+
+Genie.config.run_as_server = true
+Genie.up(8000, "0.0.0.0")
