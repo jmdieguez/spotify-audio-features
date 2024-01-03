@@ -54,7 +54,7 @@ route("/fav") do
 end
 
 route("/") do
-    h1("Hi!") |> html
+    return "Hi!"
 end
 
 Genie.config.run_as_server = true
